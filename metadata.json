@@ -1,0 +1,6 @@
+{
+  "name": "SIMPEL-OBE 01 | Desain RPS OBE Terintegrasi",
+  "description": "Aplikasi perumusan CPMK, Sub-CPMK, peta pembelajaran 16 minggu, dan bobot asesmen berbasis OBE untuk Pusat Kurikulum dan Inovasi Pembelajaran - Universitas Pattimura.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
