@@ -25,7 +25,7 @@ import type {
 } from "./types/rps";
 import {
   MODUL_2_BUKU_AJAR_URL,
-  SIMPATTI_PORTAL_URL,
+  PORTAL_OBE_URL,
   fetchKurikulumById,
   fetchKurikulumList,
   fetchRpsById,
@@ -440,8 +440,13 @@ export default function App() {
     });
   };
 
-  const handleBackToPortal = () => {
-    window.location.href = buildSsoRelayUrl(SIMPATTI_PORTAL_URL, ssoSession);
+  const handleBackToPortal = async () => {
+    const { data } = await supabase.auth.getSession();
+    const activeSession = data.session ?? ssoSession;
+    if (activeSession) {
+      writeSsoCookie(activeSession);
+    }
+    window.location.href = buildSsoRelayUrl(PORTAL_OBE_URL, activeSession);
   };
 
   const handleSignOut = async () => {

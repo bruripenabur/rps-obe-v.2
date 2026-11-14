@@ -73,7 +73,7 @@ export function InstitutionalHeader({
               className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-[#0b3d91] transition-colors hover:bg-slate-50"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>← Kembali ke Portal OBE</span>
+              <span>Kembali ke Portal OBE</span>
             </button>
 
             <button

@@ -10,6 +10,7 @@ export const SUPABASE_URL = "https://eysccwxpgdcoqfvaalye.supabase.co";
 export const SUPABASE_ANON_KEY =
   "sb_publishable_z-P7ucdZVBwh8dH4kcU7Pg_mH6vL9P8";
 
+export const PORTAL_OBE_URL = "https://obe-v2.netlify.app";
 export const SIMPATTI_PORTAL_URL = "https://obe.simpatti.site";
 export const MODUL_SUBDOMAINS = {
   portal: "https://obe.simpatti.site",
