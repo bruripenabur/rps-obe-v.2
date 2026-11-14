@@ -6,22 +6,56 @@ import type {
   RpsPayload,
 } from "../types/rps";
 
-export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL || "https://eysccwxpgdcoqfvaalye.supabase.co";
-
+export const SUPABASE_URL = "https://eysccwxpgdcoqfvaalye.supabase.co";
 export const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  "[MASUKKAN_PUBLISHABLE_KEY_SUPABASE_ANDA]";
+  "sb_publishable_z-P7ucdZVBwh8dH4kcU7Pg_mH6vL9P8";
+
+export const SIMPATTI_PORTAL_URL = "https://obe.simpatti.site";
+export const MODUL_SUBDOMAINS = {
+  portal: "https://obe.simpatti.site",
+  modul0: "https://kurikulum.simpatti.site",
+  modul1: "https://rps.simpatti.site",
+  modul2: "https://bukuajar.simpatti.site",
+  modul3: "https://rubrik.simpatti.site",
+  modul4: "https://portofolio.simpatti.site",
+  modul5: "https://cpl.simpatti.site",
+  modul6: "https://cqi.simpatti.site",
+} as const;
 
 export const MODUL_2_BUKU_AJAR_URL =
-  import.meta.env.VITE_MODUL_2_BUKU_AJAR_URL ||
-  "[MASUKKAN_URL_MODUL_2_BUKU_AJAR]";
+  import.meta.env.VITE_MODUL_2_BUKU_AJAR_URL || MODUL_SUBDOMAINS.modul2;
 
 export const isSupabaseConfigured =
   Boolean(SUPABASE_ANON_KEY) &&
   !SUPABASE_ANON_KEY.includes("[MASUKKAN_");
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+export async function checkSupabaseConnection(): Promise<{
+  connected: boolean;
+  message: string;
+}> {
+  try {
+    const { error } = await supabase
+      .from("obe_rps")
+      .select("id")
+      .limit(1);
+
+    if (error) {
+      return { connected: false, message: error.message };
+    }
+    return {
+      connected: true,
+      message: "Supabase Connected (SIMPEL-OBE DB)",
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      message:
+        err instanceof Error ? err.message : "Gagal terhubung ke Supabase",
+    };
+  }
+}
 
 export function parseCplDibebankan(raw: unknown): CplItem[] {
   if (!raw) return [];
@@ -56,7 +90,10 @@ export function parseCplDibebankan(raw: unknown): CplItem[] {
     return {
       id: String(obj.id || `cpl-${idx + 1}-${Date.now()}`),
       kode_cpl: String(
-        obj.kode_cpl || obj.kode || obj.code || `CPL-${String(idx + 1).padStart(2, "0")}`
+        obj.kode_cpl ||
+          obj.kode ||
+          obj.code ||
+          `CPL-${String(idx + 1).padStart(2, "0")}`
       ),
       unsur: String(obj.unsur || obj.kategori || obj.domain || "Pengetahuan"),
       deskripsi: String(obj.deskripsi || obj.rumusan || obj.description || ""),
@@ -65,11 +102,6 @@ export function parseCplDibebankan(raw: unknown): CplItem[] {
 }
 
 export async function fetchKurikulumList(): Promise<KurikulumProdiRecord[]> {
-  if (!isSupabaseConfigured) {
-    throw new Error(
-      "Publishable/Anon Key Supabase belum dikonfigurasi pada src/lib/supabase.ts."
-    );
-  }
   const { data, error } = await supabase
     .from("obe_kurikulum_prodi")
     .select(
@@ -85,7 +117,6 @@ export async function fetchKurikulumList(): Promise<KurikulumProdiRecord[]> {
 export async function fetchKurikulumById(
   id: string
 ): Promise<KurikulumProdiRecord | null> {
-  if (!isSupabaseConfigured) return null;
   const { data, error } = await supabase
     .from("obe_kurikulum_prodi")
     .select(
@@ -99,16 +130,24 @@ export async function fetchKurikulumById(
 }
 
 export async function fetchSavedRpsList(): Promise<
-  Array<Pick<ObeRpsRecord, "id" | "kode_mk" | "nama_mk" | "prodi" | "tahun_akademik" | "dosen_pengampu" | "status_siklus">>
+  Array<
+    Pick<
+      ObeRpsRecord,
+      | "id"
+      | "kode_mk"
+      | "nama_mk"
+      | "prodi"
+      | "tahun_akademik"
+      | "dosen_pengampu"
+      | "status_siklus"
+    >
+  >
 > {
-  if (!isSupabaseConfigured) {
-    throw new Error(
-      "Publishable/Anon Key Supabase belum dikonfigurasi pada src/lib/supabase.ts."
-    );
-  }
   const { data, error } = await supabase
     .from("obe_rps")
-    .select("id, kode_mk, nama_mk, prodi, tahun_akademik, dosen_pengampu, status_siklus")
+    .select(
+      "id, kode_mk, nama_mk, prodi, tahun_akademik, dosen_pengampu, status_siklus"
+    )
     .order("kode_mk", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -116,7 +155,6 @@ export async function fetchSavedRpsList(): Promise<
 }
 
 export async function fetchRpsById(id: string): Promise<ObeRpsRecord | null> {
-  if (!isSupabaseConfigured) return null;
   const { data, error } = await supabase
     .from("obe_rps")
     .select("*")
@@ -141,12 +179,6 @@ export interface UpsertRpsInput {
 export async function upsertObeRps(
   input: UpsertRpsInput
 ): Promise<ObeRpsRecord> {
-  if (!isSupabaseConfigured) {
-    throw new Error(
-      "Publishable/Anon Key Supabase belum diisi di src/lib/supabase.ts (SUPABASE_ANON_KEY)."
-    );
-  }
-
   const row: Record<string, unknown> = {
     kurikulum_mk_id: input.kurikulum_mk_id || null,
     kode_mk: input.kode_mk,

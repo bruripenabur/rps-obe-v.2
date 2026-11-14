@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { GraduationCap, Save, ArrowRight, CheckCircle2 } from "lucide-react";
+import {
+  GraduationCap,
+  Save,
+  ArrowRight,
+  CheckCircle2,
+  ArrowLeft,
+  LogOut,
+  UserCircle2,
+} from "lucide-react";
 import { UNPATTI_LOGO_URL } from "../utils/rpsDefaults";
 
 interface InstitutionalHeaderProps {
@@ -11,6 +19,10 @@ interface InstitutionalHeaderProps {
   activeKurikulumId: string | null;
   totalBobot: number;
   saving: boolean;
+  userFullName: string;
+  userProdi: string;
+  onBackToPortal: () => void;
+  onSignOut: () => void;
   onSaveOnly: () => void;
   onSaveAndRelay: () => void;
 }
@@ -24,6 +36,10 @@ export function InstitutionalHeader({
   activeKurikulumId,
   totalBobot,
   saving,
+  userFullName,
+  userProdi,
+  onBackToPortal,
+  onSignOut,
   onSaveOnly,
   onSaveAndRelay,
 }: InstitutionalHeaderProps) {
@@ -31,7 +47,46 @@ export function InstitutionalHeader({
 
   return (
     <header className="no-print border-b border-slate-200 bg-white">
-      <div className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-[1400px] px-4 py-4 sm:px-6">
+        {/* Top-right SSO Identity & Portal Navigation Bar */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="text-xs font-medium text-slate-500">
+            Ekosistem Digital OBE · <span className="font-mono text-[#0b3d91]">rps.simpatti.site</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+              <UserCircle2 className="h-4 w-4 shrink-0 text-[#0b3d91]" />
+              <div className="leading-tight">
+                <span className="font-bold text-[#0f172a]">
+                  {userFullName || "Dosen Pengampu"}
+                </span>
+                {userProdi && (
+                  <span className="ml-1.5 text-slate-500">· {userProdi}</span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onBackToPortal}
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-[#0b3d91] transition-colors hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>← Kembali ke Portal OBE</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Keluar</span>
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           {/* Left Institutional Branding */}
           <div className="flex items-start gap-4 sm:items-center">

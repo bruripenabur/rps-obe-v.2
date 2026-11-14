@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import type { Session, User } from "@supabase/supabase-js";
 import {
   BookOpen,
   GitBranch,
@@ -8,6 +9,7 @@ import {
   AlertCircle,
   ExternalLink,
   X,
+  Loader2,
 } from "lucide-react";
 import type {
   CplItem,
@@ -23,14 +25,23 @@ import type {
 } from "./types/rps";
 import {
   MODUL_2_BUKU_AJAR_URL,
+  SIMPATTI_PORTAL_URL,
   fetchKurikulumById,
   fetchKurikulumList,
   fetchRpsById,
   fetchSavedRpsList,
   isSupabaseConfigured,
   parseCplDibebankan,
+  supabase,
   upsertObeRps,
 } from "./lib/supabase";
+import {
+  buildSsoRelayUrl,
+  detectSsoSession,
+  getUserProfileMetadata,
+  signOutSso,
+  writeSsoCookie,
+} from "./lib/ssoAuth";
 import {
   computeRekapBobot,
   createDefault16Weeks,
@@ -43,6 +54,8 @@ import { Tab1Identitas } from "./components/Tab1Identitas";
 import { Tab2Pemetaan } from "./components/Tab2Pemetaan";
 import { Tab3Rencana16Minggu } from "./components/Tab3Rencana16Minggu";
 import { Tab4PratinjauEkspor } from "./components/Tab4PratinjauEkspor";
+import { SsoLockScreen } from "./components/SsoLockScreen";
+import { SupabaseStatusBadge } from "./components/SupabaseStatusBadge";
 
 type ActiveTab = "tab1" | "tab2" | "tab3" | "tab4";
 
@@ -78,6 +91,10 @@ function parseSksPair(sksVal: number | string | null): {
 }
 
 export default function App() {
+  const [authChecking, setAuthChecking] = useState<boolean>(true);
+  const [ssoSession, setSsoSession] = useState<Session | null>(null);
+  const [ssoUser, setSsoUser] = useState<User | null>(null);
+
   const [activeTab, setActiveTab] = useState<ActiveTab>("tab1");
   const [payload, setPayload] = useState<RpsPayload>(() =>
     createInitialRpsPayload()
@@ -113,37 +130,72 @@ export default function App() {
   const [saving, setSaving] = useState<boolean>(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const applyKurikulumRecord = useCallback((mk: KurikulumProdiRecord) => {
-    const { teori, praktikum } = parseSksPair(mk.sks);
-    const parsedCpls = parseCplDibebankan(mk.cpl_dibebankan);
-    const timeStr = formatEstimasiWaktu(teori, praktikum);
+  const userProfile = getUserProfileMetadata(ssoUser);
 
-    setPayload((prev) => ({
-      ...prev,
-      identitas: {
-        ...prev.identitas,
-        prodi: mk.nama_prodi || mk.kode_prodi || prev.identitas.prodi,
-        kode_mk: mk.kode_mk || "",
-        nama_mk: mk.nama_mk || "",
-        sks_teori: teori,
-        sks_praktikum: praktikum,
-        semester: Number(mk.semester) || 1,
-        tahun_akademik: mk.tahun_kurikulum
-          ? `${mk.tahun_kurikulum}`
-          : prev.identitas.tahun_akademik,
-      },
-      daftar_cpl: parsedCpls,
-      rencana_16_minggu: prev.rencana_16_minggu.map((w) => ({
-        ...w,
-        estimasi_waktu: timeStr,
-      })),
-    }));
+  const applyAutoFillFromUser = useCallback(
+    (user: User | null) => {
+      const meta = getUserProfileMetadata(user);
+      if (!meta.fullName && !meta.prodi) return;
+      setPayload((prev) => ({
+        ...prev,
+        identitas: {
+          ...prev.identitas,
+          prodi: prev.identitas.prodi.trim() ? prev.identitas.prodi : meta.prodi,
+        },
+        otorisasi: {
+          ...prev.otorisasi,
+          dosen_pengampu: prev.otorisasi.dosen_pengampu.trim()
+            ? prev.otorisasi.dosen_pengampu
+            : meta.fullName,
+        },
+      }));
+    },
+    []
+  );
 
-    setSelectedKurikulumId(mk.id);
-    setActiveKurikulumId(mk.id);
-    setSelectedRpsId("");
-    setActiveRpsId(null);
-  }, []);
+  const applyKurikulumRecord = useCallback(
+    (mk: KurikulumProdiRecord) => {
+      const { teori, praktikum } = parseSksPair(mk.sks);
+      const parsedCpls = parseCplDibebankan(mk.cpl_dibebankan);
+      const timeStr = formatEstimasiWaktu(teori, praktikum);
+
+      setPayload((prev) => ({
+        ...prev,
+        identitas: {
+          ...prev.identitas,
+          prodi:
+            mk.nama_prodi ||
+            mk.kode_prodi ||
+            prev.identitas.prodi ||
+            userProfile.prodi,
+          kode_mk: mk.kode_mk || "",
+          nama_mk: mk.nama_mk || "",
+          sks_teori: teori,
+          sks_praktikum: praktikum,
+          semester: Number(mk.semester) || 1,
+          tahun_akademik: mk.tahun_kurikulum
+            ? `${mk.tahun_kurikulum}`
+            : prev.identitas.tahun_akademik,
+        },
+        otorisasi: {
+          ...prev.otorisasi,
+          dosen_pengampu:
+            prev.otorisasi.dosen_pengampu.trim() || userProfile.fullName,
+        },
+        daftar_cpl: parsedCpls,
+        rencana_16_minggu: prev.rencana_16_minggu.map((w) => ({
+          ...w,
+          estimasi_waktu: timeStr,
+        })),
+      }));
+
+      setSelectedKurikulumId(mk.id);
+      setActiveKurikulumId(mk.id);
+      setSelectedRpsId("");
+      setActiveRpsId(null);
+    },
+    [userProfile.fullName, userProfile.prodi]
+  );
 
   const applySavedRpsRecord = useCallback((rec: ObeRpsRecord) => {
     const fallback = createInitialRpsPayload();
@@ -234,8 +286,40 @@ export default function App() {
     }
   }, []);
 
-  // Initial load + URL params (?rps_id=... or ?kurikulum_mk_id=...)
+  const refreshAuthSession = useCallback(async () => {
+    setAuthChecking(true);
+    const result = await detectSsoSession();
+    setSsoSession(result.session);
+    setSsoUser(result.user);
+    if (result.user) {
+      applyAutoFillFromUser(result.user);
+    }
+    setAuthChecking(false);
+  }, [applyAutoFillFromUser]);
+
+  // SSO detection & Supabase Auth listener on mount
   useEffect(() => {
+    refreshAuthSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSsoSession(session);
+      setSsoUser(session?.user ?? null);
+      if (session) {
+        writeSsoCookie(session);
+        applyAutoFillFromUser(session.user);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [refreshAuthSession, applyAutoFillFromUser]);
+
+  // Initial data load + URL params (?rps_id=... or ?kurikulum_mk_id=...) once SSO session is active
+  useEffect(() => {
+    if (!ssoSession) return;
     loadEcosystemLists();
 
     const params = new URLSearchParams(window.location.search);
@@ -281,7 +365,7 @@ export default function App() {
           );
         });
     }
-  }, [applyKurikulumRecord, applySavedRpsRecord, loadEcosystemLists]);
+  }, [ssoSession, applyKurikulumRecord, applySavedRpsRecord, loadEcosystemLists]);
 
   const handleSelectKurikulum = async (id: string) => {
     if (!id) {
@@ -337,7 +421,11 @@ export default function App() {
   };
 
   const handleResetManual = () => {
-    setPayload(createInitialRpsPayload());
+    const fresh = createInitialRpsPayload();
+    if (userProfile.prodi) fresh.identitas.prodi = userProfile.prodi;
+    if (userProfile.fullName)
+      fresh.otorisasi.dosen_pengampu = userProfile.fullName;
+    setPayload(fresh);
     setSelectedKurikulumId("");
     setSelectedRpsId("");
     setActiveRpsId(null);
@@ -347,8 +435,19 @@ export default function App() {
     setToast({
       type: "success",
       title: "Mode Input Manual Aktif",
-      message: "Form RPS telah direset untuk pengisian mata kuliah baru.",
+      message:
+        "Form RPS telah direset dan kolom Dosen Pengampu & Program Studi diisi otomatis dari profil SSO.",
     });
+  };
+
+  const handleBackToPortal = () => {
+    window.location.href = buildSsoRelayUrl(SIMPATTI_PORTAL_URL, ssoSession);
+  };
+
+  const handleSignOut = async () => {
+    await signOutSso();
+    setSsoSession(null);
+    setSsoUser(null);
   };
 
   // Updaters
@@ -616,24 +715,21 @@ export default function App() {
       setSelectedRpsId(saved.id);
       loadEcosystemLists();
 
-      const targetUrl = `${MODUL_2_BUKU_AJAR_URL}?rps_id=${saved.id}`;
+      const targetUrl = buildSsoRelayUrl(MODUL_2_BUKU_AJAR_URL, ssoSession, {
+        rps_id: saved.id,
+      });
 
       if (relayToModul2) {
-        const isPlaceholderUrl = MODUL_2_BUKU_AJAR_URL.includes("[MASUKKAN_");
         setToast({
           type: "success",
           title: "RPS Tersimpan ke Ekosistem Supabase!",
-          message: isPlaceholderUrl
-            ? `RPS berhasil disimpan (ID: ${saved.id}). URL Modul 2 masih berupa placeholder (${MODUL_2_BUKU_AJAR_URL}) — silakan atur VITE_MODUL_2_BUKU_AJAR_URL untuk pengalihan otomatis.`
-            : `RPS berhasil disimpan (ID: ${saved.id}). Mengalihkan ke Modul 2 (Buku Ajar)...`,
+          message: `RPS berhasil disimpan (ID: ${saved.id}). Mengalihkan ke Modul 2 (Buku Ajar)...`,
           relayUrl: targetUrl,
         });
 
-        if (!isPlaceholderUrl) {
-          setTimeout(() => {
-            window.location.href = targetUrl;
-          }, 1200);
-        }
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 1000);
       } else {
         setToast({
           type: "success",
@@ -692,6 +788,27 @@ export default function App() {
     },
   ];
 
+  if (authChecking) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f172a] text-white">
+        <Loader2 className="h-8 w-8 animate-spin text-[#ffcc00]" />
+        <p className="mt-3 text-sm font-medium text-blue-100">
+          Memeriksa Sesi SSO Ekosistem SIMPEL-OBE...
+        </p>
+        <SupabaseStatusBadge />
+      </div>
+    );
+  }
+
+  if (!ssoSession) {
+    return (
+      <>
+        <SsoLockScreen onSuccessLogin={refreshAuthSession} />
+        <SupabaseStatusBadge />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* Bilah Sinkronisasi Ekosistem (Sticky Top Navy + Gold) */}
@@ -718,6 +835,10 @@ export default function App() {
         activeKurikulumId={activeKurikulumId}
         totalBobot={rekapBobot.total}
         saving={saving}
+        userFullName={userProfile.fullName}
+        userProdi={userProfile.prodi}
+        onBackToPortal={handleBackToPortal}
+        onSignOut={handleSignOut}
         onSaveOnly={() => handleSaveRps(false)}
         onSaveAndRelay={() => handleSaveRps(true)}
       />
@@ -878,6 +999,9 @@ export default function App() {
       <footer className="no-print border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
         SIMPEL-OBE 01 · Pusat Kurikulum dan Inovasi Pembelajaran · Universitas Pattimura
       </footer>
+
+      {/* Indikator Diagnostik Koneksi Supabase (Pojok Kanan Bawah) */}
+      <SupabaseStatusBadge />
     </div>
   );
 }
